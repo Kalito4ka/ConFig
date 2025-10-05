@@ -1,9 +1,0 @@
-# Тестовый скрипт для VFS Emulator
-ls
-cd "My Documents"
-ls
-cd "Project Files"
-ls "cat" "x2" "arg3"
-ls "Some Folder With Spaces"
-foobar
-cd "НеСуществующаяПапка"

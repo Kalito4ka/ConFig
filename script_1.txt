@@ -1,0 +1,11 @@
+# Тестовый скрипт для VFS Emulator с ошибками
+ls
+cd "My Documents"
+ls
+cd "Project Files"
+ls "cat" "x2" "arg3"
+ls "Some Folder With Spaces"
+
+cd "jld
+foobar
+cd "НеСуществующаяПапка"

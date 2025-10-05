@@ -9,6 +9,7 @@ class VFSEmulator:
         self.RootWindow = RootWindow
         self.VFSname = "VFS Emulator"
         self.RootWindow.title(self.VFSname)
+
         #область вывода
         self.OutputArea = scrolledtext.ScrolledText(RootWindow, state='disabled', height=20, width=80)
         self.OutputArea.pack(padx=10, pady=10)
@@ -24,16 +25,17 @@ class VFSEmulator:
 
         self.InputEntry.bind("<Return>", self.ProcessCommand)
 
-        #сохранить параметры
         self.VFSpath = VFSpath
         self.StartupScript = StartupScript
+
+        self._running_startup = False
+        self._startup_had_errors = False
 
         self.Print(f"Параметры запуска:\n  VFS path: {self.VFSpath}\n  Startup script: {self.StartupScript}\n\n")
 
         if self.StartupScript:
             self.RootWindow.after(100, lambda: self.RunStartupScript(self.StartupScript))
 
-        #приветственное сообщение
         self.Print("VFS Emulator приступил к работе! Напишите 'exit', чтобы выйти.\n")
 
     def Print(self, text):
@@ -52,29 +54,25 @@ class VFSEmulator:
             if EscapeNext:
                 CurrentArg.append(char)
                 EscapeNext = False
-
             elif char == '\\':
                 EscapeNext = True
-
             elif char == '"':
                 InsideQuotes = not InsideQuotes
-
             elif char == ' ' and not InsideQuotes:
                 if CurrentArg:
                     Args.append(''.join(CurrentArg))
                     CurrentArg = []
-
             else:
                 CurrentArg.append(char)
 
         if CurrentArg:
             Args.append(''.join(CurrentArg))
 
-        #проверяем ошибки
+        #проверяем ошибки парсера
         if InsideQuotes:
             raise ValueError("Вы не закрыли кавычки!!!")
         if EscapeNext:
-            raise ValueError("После '\' ничего нет!!!")
+            raise ValueError("После '\\' ничего нет!!!")
 
         return Args
 
@@ -86,6 +84,8 @@ class VFSEmulator:
             Parts = self.ParseArguments(CommandString)
         except ValueError as e:
             self.Print(f"Ошибка парсера: {e}\n\n")
+            if getattr(self, "_running_startup", False):
+                self._startup_had_errors = True
             return
 
         if not Parts:
@@ -99,11 +99,15 @@ class VFSEmulator:
             try:
                 result = self.Commands[cmd](args)
                 if result:
-                    self.Print(result+"\n")
+                    self.Print(result + "\n")
             except Exception as e:
-                self.Print(f"Ошибка при выполнении команды '{cmd}':{e}\n")
+                self.Print(f"Ошибка при выполнении команды '{cmd}': {e}\n")
+                if getattr(self, "_running_startup", False):
+                    self._startup_had_errors = True
         else:
             self.Print(f"Команда не найдена: {cmd}\n\n")
+            if getattr(self, "_running_startup", False):
+                self._startup_had_errors = True
 
     def ProcessCommand(self, event):
         CommandString = self.InputEntry.get()
@@ -117,20 +121,22 @@ class VFSEmulator:
         return f"Команда cd вызвана с аргументами: {Args}"
 
     def CMDexit(self, Args):
-        self.Print(f"Команда exit вызвана. Приложение закрывается...")
+        if getattr(self, "_startup_had_errors", False):
+            self.Print("Внимание: при выполнении стартового скрипта были ошибки.\n")
+        self.Print("Команда exit вызвана. Приложение закрывается...\n")
         self.RootWindow.destroy()
-
-
 
     def RunStartupScript(self, ScriptPath, DelayMs=50, UseComments=True, DisableInput=True):
         if not os.path.exists(ScriptPath):
             self.Print(f"Стартовый скрипт не найден: {ScriptPath}\n\n")
+            self._startup_had_errors = True
             return
         try:
             with open(ScriptPath, 'r', encoding='utf-8') as f:
                 RawLines = list(enumerate(f, start=1))
         except Exception as e:
             self.Print(f"Не удалось открыть стартовый скрипт: {e}\n\n")
+            self._startup_had_errors = True
             return
 
         self.StartupQueue = []
@@ -144,22 +150,31 @@ class VFSEmulator:
             except Exception:
                 pass
 
-        #пошаговое выполнение
+        self._running_startup = True
+        self._startup_had_errors = False
+
         def ProcessNext():
             if not self.StartupQueue:
-                self.Print("Стартовый скрипт завершён. \n\n")
+                if self._startup_had_errors:
+                    self.Print("Стартовый скрипт завершён с ошибками.\n\n")
+                else:
+                    self.Print("Стартовый скрипт завершён.\n\n")
+                self._running_startup = False
                 if DisableInput:
                     try:
                         self.InputEntry.configure(state='normal')
                     except Exception:
                         pass
                 return
+
             linenumber, line = self.StartupQueue.pop(0)
             stripped = line.strip()
+
 
             if not stripped:
                 self.RootWindow.after(DelayMs, ProcessNext)
                 return
+
             if UseComments and stripped.startswith('#'):
                 self.RootWindow.after(DelayMs, ProcessNext)
                 return
@@ -168,6 +183,9 @@ class VFSEmulator:
                 self.ExecuteCommandString(stripped, EchoInput=True)
             except Exception as e:
                 self.Print(f"Необработанная ошибка на строке {linenumber}: {e}\n")
+                if getattr(self, "_running_startup", False):
+                    self._startup_had_errors = True
+
             self.RootWindow.after(DelayMs, ProcessNext)
 
         self.RootWindow.after(0, ProcessNext)
@@ -180,12 +198,12 @@ def ManualParseArgs():
     while i < len(argv):
         if argv[i] == "--vfs" and i+1 < len(argv):
             VFSpath = argv[i+1]
-            i+=2
+            i += 2
         elif argv[i] == "--script" and i+1 < len(argv):
             StartupScript = argv[i+1]
-            i+=2
+            i += 2
         else:
-            i+=1
+            i += 1
     return VFSpath, StartupScript
 
 if __name__ == "__main__":
