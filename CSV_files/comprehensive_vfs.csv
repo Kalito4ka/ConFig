@@ -1,0 +1,16 @@
+Path,Type,Content
+/,directory,
+/bin,directory,
+/bin/app1,file,"YXBwMQ=="
+/bin/app2,file,"YXBwMg=="
+/etc,directory,
+/etc/config.conf,file,"c2V0dGluZ3M9MQ=="
+/home,directory,
+/home/user,directory,
+/home/user/documents,directory,
+/home/user/documents/file1.txt,file,"RG9jdW1lbnQgMQ=="
+/home/user/.bashrc,file,"c2V0dGluZ3M9MQ=="
+/level1,directory,
+/level1/level2,directory,
+/level1/level2/level3,directory,
+/level1/level2/level3/deep_file.txt,file,"RGVlcCBmaWxl"

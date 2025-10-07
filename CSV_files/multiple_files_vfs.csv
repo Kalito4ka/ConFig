@@ -1,0 +1,8 @@
+Path,Type,Content
+/,directory,
+/rootfile.txt,file,Um9vdCBmaWxlCg==
+/docs,directory,
+/docs/readme.txt,file,QW5vdGhlciBmaWxlCg==
+/bin,directory,
+/bin/tool.sh,file,RW1wdHkgc2NyaXB0Cg==
+/bin/empty_dir,directory,

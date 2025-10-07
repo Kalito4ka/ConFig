@@ -1,0 +1,14 @@
+ls /
+cd /a
+ls
+cd b
+ls
+cd c
+ls
+cd ..
+cd ..
+cd ..
+ls /x/y/z
+cd /x/y/z
+ls
+cat deep.txt

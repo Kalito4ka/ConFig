@@ -1,0 +1,12 @@
+Path,Type,Content
+/,directory
+/a,directory,
+/a/file_a.txt,file,TGV2ZWwxCkxldmVsMgpMZXZlbDMK
+/a/b,directory,
+/a/b/b_file.txt,file,RGVlcCBmaWxlCg==
+/a/b/c,directory
+/a/b/c/deep.txt,file,RGVlcCBmaWxlCg==
+/x,directory
+/x/y,directory
+/x/y/z,directory
+/x/y/z/zfile.txt,file,Um9vdCB6IGZpbGUK

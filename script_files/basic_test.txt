@@ -1,0 +1,10 @@
+ls
+ls /
+ls "dir1"
+ls /dir1
+cd dir1
+ls
+cd ..
+ls file1.txt
+cd nonexist
+ls "unclosed quote

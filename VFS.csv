@@ -1,4 +1,0 @@
-path,type,content
-/,dir,
-home,dir,
-home/file1.txt,file,Hello VFS!

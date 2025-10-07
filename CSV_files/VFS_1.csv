@@ -1,0 +1,5 @@
+path,type,content
+/,directory,
+/docs,directory,
+/docs/readme.txt,file,UmVhZG1lIGZpbGU=  # "Readme file"
+/docs/manual.txt,file,TWFudWFsIGZpbGU=    # "Manual file"

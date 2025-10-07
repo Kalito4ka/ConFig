@@ -3,6 +3,36 @@ import tkinter as tk
 from tkinter import scrolledtext
 import os
 import sys
+import base64
+import csv
+
+class VFSNode:
+    def __init__(self, Name, NodeType="directory", Content=None, Parent=None):
+        self.Name = Name
+        self.Type = NodeType
+        self.Content = Content if Content else b""
+        self.Children = {}
+        self.Parent = Parent
+
+    def AddChildren(self, Child):
+        if self.Type != "directory":
+            raise ValueError("Нельзя добавлять потомка в файл")
+        self.Children[Child.Name] = Child
+        Child.Parent = self
+
+    def GetChild(self, Name):
+        return self.Children.get(Name)
+
+    def ListChildren(self):
+        return list(self.Children.values())
+
+    def Path(self):
+        parts = []
+        node = self
+        while node is not None and node.Parent is not None:
+            parts.append(node.Name)
+            node = node.Parent
+        return "/" + "/".join(reversed(parts))
 
 class VFSEmulator:
     def __init__(self, RootWindow, VFSpath=None, StartupScript=None):
@@ -10,33 +40,35 @@ class VFSEmulator:
         self.VFSname = "VFS Emulator"
         self.RootWindow.title(self.VFSname)
 
-        #область вывода
         self.OutputArea = scrolledtext.ScrolledText(RootWindow, state='disabled', height=20, width=80)
         self.OutputArea.pack(padx=10, pady=10)
-        #область ввода
+
         self.InputEntry = tk.Entry(RootWindow, width=80)
         self.InputEntry.pack(padx=10, pady=(0, 10))
-
-        self.Commands = {
-            "ls": self.CMDls,
-            "cd": self.CMDcd,
-            "exit": self.CMDexit
-        }
-
         self.InputEntry.bind("<Return>", self.ProcessCommand)
+
+        self.Commands = {"ls": self.CMDls, "cd": self.CMDcd, "exit": self.CMDexit}
 
         self.VFSpath = VFSpath
         self.StartupScript = StartupScript
+
+        self.VFSRoot = None
+        self.CurrentDir = None
+
+        if self.VFSpath:
+            self.LoadVFSManual(self.VFSpath)
 
         self._running_startup = False
         self._startup_had_errors = False
 
         self.Print(f"Параметры запуска:\n  VFS path: {self.VFSpath}\n  Startup script: {self.StartupScript}\n\n")
+        self.Print("VFS Emulator приступил к работе! Напишите 'exit', чтобы выйти.\n")
 
         if self.StartupScript:
-            self.RootWindow.after(100, lambda: self.RunStartupScript(self.StartupScript))
-
-        self.Print("VFS Emulator приступил к работе! Напишите 'exit', чтобы выйти.\n")
+            if self.VFSRoot:
+                self.RootWindow.after(100, lambda: self.RunStartupScript(self.StartupScript))
+            else:
+                self.Print("Стартовый скрипт не будет выполнен, VFS не загружена.\n")
 
     def Print(self, text):
         self.OutputArea.configure(state='normal')
@@ -68,7 +100,6 @@ class VFSEmulator:
         if CurrentArg:
             Args.append(''.join(CurrentArg))
 
-        #проверяем ошибки парсера
         if InsideQuotes:
             raise ValueError("Вы не закрыли кавычки!!!")
         if EscapeNext:
@@ -76,7 +107,6 @@ class VFSEmulator:
 
         return Args
 
-    #универсальное выполнение 1 строки команды
     def ExecuteCommandString(self, CommandString, EchoInput=True):
         if EchoInput:
             self.Print(f"${CommandString}\n")
@@ -115,10 +145,41 @@ class VFSEmulator:
         self.ExecuteCommandString(CommandString, EchoInput=True)
 
     def CMDls(self, Args):
-        return f"Команда ls вызвана с аргументами: {Args}"
+        if not self.VFSRoot:
+            return "VFS не загружена. Невозможно выполнить ls."
+
+        available = []
+        if self.CurrentDir:
+            for child in self.CurrentDir.ListChildren():
+                available.append(child.Name)
+
+        if not Args:
+            if available:
+                return f"Вызвана команда ls (заглушка). Доступные аргументы: {', '.join(available)}"
+            else:
+                return "Вызвана команда ls (заглушка). Текущая директория пуста."
+        else:
+            # просто эхо аргументов
+            joined = " ".join(Args)
+            return f"Вызвана команда ls (заглушка) вызвана с аргументами: {joined}"
 
     def CMDcd(self, Args):
-        return f"Команда cd вызвана с аргументами: {Args}"
+        if not self.VFSRoot:
+            return "VFS не загружена. Невозможно выполнить cd."
+
+        available = []
+        if self.CurrentDir:
+            for child in self.CurrentDir.ListChildren():
+                available.append(child.Name)
+
+        if not Args:
+            if available:
+                return f"Вызвана команда cd (заглушка). Доступные аргументы: {', '.join(available)}"
+            else:
+                return "Вызвана команда cd (заглушка). Текущая директория пуста."
+        else:
+            joined = " ".join(Args)
+            return f"Вызвана команда cd (заглушка) вызвана с аргументами: {joined}"
 
     def CMDexit(self, Args):
         if getattr(self, "_startup_had_errors", False):
@@ -140,9 +201,9 @@ class VFSEmulator:
             return
 
         self.StartupQueue = []
-        for linenumber, rawline in RawLines:
-            line = rawline.rstrip('\n').rstrip('\r')
-            self.StartupQueue.append((linenumber, line))
+        for Num, Line in RawLines:
+            CleanLine = Line.rstrip("\r\n")
+            self.StartupQueue.append((Num, CleanLine))
 
         if DisableInput:
             try:
@@ -169,13 +230,7 @@ class VFSEmulator:
 
             linenumber, line = self.StartupQueue.pop(0)
             stripped = line.strip()
-
-
-            if not stripped:
-                self.RootWindow.after(DelayMs, ProcessNext)
-                return
-
-            if UseComments and stripped.startswith('#'):
+            if not stripped or (UseComments and stripped.startswith('#')):
                 self.RootWindow.after(DelayMs, ProcessNext)
                 return
 
@@ -189,6 +244,121 @@ class VFSEmulator:
             self.RootWindow.after(DelayMs, ProcessNext)
 
         self.RootWindow.after(0, ProcessNext)
+
+    def LoadVFSManual(self, CSVPath):
+        if not os.path.exists(CSVPath):
+            self.Print(f"Файл VFS не найден: {CSVPath}\n")
+            self.VFSRoot = None
+            self.CurrentDir = None
+            self._startup_had_errors = True
+            return
+
+        root = VFSNode("/", "directory")
+        nodes = {"/": root}
+
+        errors = []
+        processed_paths = set()
+
+        try:
+            with open(CSVPath, "r", encoding="utf-8-sig", newline='') as csvfile:
+                reader = csv.DictReader(csvfile)
+                if reader.fieldnames is None:
+                    self.Print(f"Ошибка формата VFS: CSV не содержит заголовков.\n")
+                    self.VFSRoot = None
+                    self.CurrentDir = None
+                    self._startup_had_errors = True
+                    return
+
+                fnames = [fn.strip() for fn in reader.fieldnames]
+                if "Path" not in fnames or "Type" not in fnames:
+                    self.Print(
+                        f"Ошибка формата VFS: в CSV обязателен столбец 'Path' и 'Type'. Найдены: {', '.join(fnames)}\n")
+                    self.VFSRoot = None
+                    self.CurrentDir = None
+                    self._startup_had_errors = True
+                    return
+
+                raw_rows = list(enumerate(reader, start=2))  # start=2 — потому что header на 1 строке
+                for lineno, row in raw_rows:
+                    raw_path = row.get("Path")
+                    raw_type = row.get("Type")
+                    raw_content = row.get("Content", "")
+
+                    if raw_path is None or raw_type is None:
+                        errors.append((lineno, "Отсутствует обязательное поле 'Path' или 'Type'"))
+                        continue
+
+                    path = raw_path.replace("\\", "/").strip()
+                    type_ = raw_type.strip()
+                    content = raw_content.strip() if raw_content else ""
+
+                    if not path:
+                        errors.append((lineno, "Пустое значение Path"))
+                        continue
+
+                    if path == "/":
+                        continue
+
+                    stripped_path = path.strip("/")
+                    path_parts = [p.strip() for p in stripped_path.split("/") if p.strip() != ""]
+                    if not path_parts:
+                        errors.append((lineno, f"Некорректный Path: '{raw_path}'"))
+                        continue
+
+                    node_name = path_parts[-1]
+                    parent_path = "/" + "/".join(path_parts[:-1]) if len(path_parts) > 1 else "/"
+
+                    parent = nodes.get(parent_path)
+                    if not parent:
+                        errors.append((lineno, f"Родительский путь не найден: '{parent_path}' для '{path}'"))
+                        continue
+
+                    if type_ == "file":
+                        try:
+                            content_bytes = base64.b64decode(content) if content else b""
+                        except Exception:
+                            content_bytes = b""
+                            errors.append(
+                                (lineno, f"Невалидный base64 в Content для файла '{path}' — содержимое будет пустым"))
+                        node = VFSNode(node_name, "file", content_bytes, Parent=parent)
+                    elif type_ == "directory":
+                        node = VFSNode(node_name, "directory", None, Parent=parent)
+                    else:
+                        errors.append((lineno, f"Неизвестный Type '{type_}' в строке"))
+                        continue
+
+                    if node_name in parent.Children:
+                        errors.append(
+                            (lineno, f"Дубликат узла '{node_name}' в '{parent_path}' — строка проигнорирована"))
+                        continue
+
+                    parent.AddChildren(node)
+                    processed_paths.add(path)
+
+                    if type_ == "directory":
+                        full_path = parent_path + "/" + node_name if parent_path != "/" else "/" + node_name
+                        nodes[full_path] = node
+
+            if errors:
+                self.Print(f"В процессе загрузки VFS обнаружены ошибки в файле {CSVPath}:\n")
+                for lineno, msg in errors:
+                    self.Print(f"  строка {lineno}: {msg}\n")
+                self.Print("\nVFS не загружена из-за ошибок формата.\n")
+                self.VFSRoot = None
+                self.CurrentDir = None
+                self._startup_had_errors = True
+                return
+
+            # Успешно загружено (и ошибок не найдено)
+            self.VFSRoot = root
+            self.CurrentDir = root
+            self.Print(f"VFS загружена успешно: {CSVPath}\n")
+
+        except Exception as e:
+            self.Print(f"Ошибка при загрузке VFS: {e}\n")
+            self.VFSRoot = None
+            self.CurrentDir = None
+            self._startup_had_errors = True
 
 def ManualParseArgs():
     VFSpath = None
@@ -207,9 +377,8 @@ def ManualParseArgs():
     return VFSpath, StartupScript
 
 if __name__ == "__main__":
-
     VFSpath, StartupScript = ManualParseArgs()
-
     RootWindow = tk.Tk()
     App = VFSEmulator(RootWindow, VFSpath=VFSpath, StartupScript=StartupScript)
     RootWindow.mainloop()
+

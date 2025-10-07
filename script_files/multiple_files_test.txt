@@ -1,0 +1,19 @@
+ls "dir with spaces"
+ls "dir with \"escaped\" quotes"
+ls "unclosed
+# Проверка простых команд
+ls
+cd /
+ls file1.txt
+cd dir1
+ls
+cd ..
+cd nonexist
+# Проверка относительных переходов
+cd /
+cd dir1
+cd ..
+cd .
+cd ..
+# Ошибочные команды
+foobar
