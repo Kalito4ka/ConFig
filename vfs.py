@@ -47,7 +47,13 @@ class VFSEmulator:
         self.InputEntry.pack(padx=10, pady=(0, 10))
         self.InputEntry.bind("<Return>", self.ProcessCommand)
 
-        self.Commands = {"ls": self.CMDls, "cd": self.CMDcd, "exit": self.CMDexit}
+        self.Commands = {"ls": self.CMDls,
+                         "cd": self.CMDcd,
+                         "who": self.CMDwho,
+                         "cat": self.CMDcat,
+                         "tac": self.CMDtac,
+                         "exit": self.CMDexit,
+                         }
 
         self.VFSpath = VFSpath
         self.StartupScript = StartupScript
@@ -144,42 +150,100 @@ class VFSEmulator:
         self.InputEntry.delete(0, tk.END)
         self.ExecuteCommandString(CommandString, EchoInput=True)
 
-    def CMDls(self, Args):
-        if not self.VFSRoot:
-            return "VFS не загружена. Невозможно выполнить ls."
-
-        available = []
-        if self.CurrentDir:
-            for child in self.CurrentDir.ListChildren():
-                available.append(child.Name)
-
-        if not Args:
-            if available:
-                return f"Вызвана команда ls (заглушка). Доступные аргументы: {', '.join(available)}"
-            else:
-                return "Вызвана команда ls (заглушка). Текущая директория пуста."
+    def ResolvePath(self, startNode, PathStr):
+        if not PathStr:
+            return startNode
+        p = PathStr.strip()
+        if p.startswith("/"):
+            node = self.VFSRoot
+            parts = [part for part in p.strip("/").split("/") if part != ""]
         else:
-            # просто эхо аргументов
-            joined = " ".join(Args)
-            return f"Вызвана команда ls (заглушка) вызвана с аргументами: {joined}"
+            node = startNode
+            parts = [part for part in p.split("/") if part != ""]
+        for part in parts:
+            if part == ".":
+                continue
+            if part == "..":
+                if node.Parent:
+                    node = node.Parent
+                else:
+                    return None
+                continue
+            child = node.GetChild(part)
+            if not child:
+                return None
+            node = child
+        return node
+
+    def CMDls(self, Args):
+        if not self.CurrentDir:
+            return "VFS не загружена. Невозможно выполнить ls."
+        DirToList = self.CurrentDir
+        if Args:
+            target = Args[0].strip()
+            node = self.ResolvePath(self.CurrentDir, target)
+            if not node:
+                return f"Нет такой директории: {target}"
+            if node.Type != "directory":
+                return f"{target} не является директорией"
+            DirToList = node
+        ChildNames = []
+        for ChildNode in DirToList.ListChildren():
+            ChildNames.append(ChildNode.Name)
+        return "  ".join(ChildNames) if ChildNames else "(пусто)"
 
     def CMDcd(self, Args):
-        if not self.VFSRoot:
+        if not self.CurrentDir:
             return "VFS не загружена. Невозможно выполнить cd."
-
-        available = []
-        if self.CurrentDir:
-            for child in self.CurrentDir.ListChildren():
-                available.append(child.Name)
-
         if not Args:
-            if available:
-                return f"Вызвана команда cd (заглушка). Доступные аргументы: {', '.join(available)}"
-            else:
-                return "Вызвана команда cd (заглушка). Текущая директория пуста."
-        else:
-            joined = " ".join(Args)
-            return f"Вызвана команда cd (заглушка) вызвана с аргументами: {joined}"
+            self.CurrentDir = self.VFSRoot
+            return
+        Path = Args[0].strip()
+        if Path == "..":
+            if self.CurrentDir.Parent:
+                self.CurrentDir = self.CurrentDir.Parent
+            return
+        Node = self.ResolvePath(self.CurrentDir, Path)
+        if not Node:
+            return f"Нет такой директории: {Path}"
+        if Node.Type != "directory":
+            return f"{Path} не является директорией"
+        self.CurrentDir = Node
+
+    def CMDwho(self, Args):
+        try:
+            user = os.getlogin()
+        except Exception:
+            user = os.environ.get("USER") or os.environ.get("USERNAME") or "user"
+        return user
+
+    def CMDcat(self, Args):
+        if not Args:
+            return "Использование: cat <путь>"
+        path = Args[0]
+        node = self.ResolvePath(self.CurrentDir, path)
+        if not node:
+            return f"Нет такого файла: {path}"
+        if node.Type != "file":
+            return f"{path} не является файлом"
+        try:
+            text = node.Content.decode('utf-8')
+        except Exception:
+            text = node.Content.decode('utf-8', errors='replace')
+        return text
+
+    def CMDtac(self, Args):
+        if not Args:
+            return "Использование: tac <путь>"
+        path = Args[0]
+        node = self.ResolvePath(self.CurrentDir, path)
+        if not node:
+            return f"Нет такого файла: {path}"
+        if node.Type != "file":
+            return f"{path} не является файлом"
+        text = node.Content.decode('utf-8', errors='replace')
+        lines = text.splitlines()
+        return "\n".join(reversed(lines))
 
     def CMDexit(self, Args):
         if getattr(self, "_startup_had_errors", False):

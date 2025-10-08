@@ -575,3 +575,199 @@ pause
 
 Файл test4.bat показывает, что будет, если загрузить VFS, содержащую ошибку:
 ![alt text](image-22.png)
+
+Этап 4
+Цель: поддержать команды, имитирующие работу в UNIX-подобной командной строке.
+1 требование: Необходимо реализовать логику для ls и cd.
+Реализация: Был изменён функционал методов CMDls и CMDcd. Теперь это не просто заглушки, а полноценные команды, имитирующие работу в UNIX-подобной командной строке. Назначение команды ls - это вывести список содержимого текущей директории или указанного пути. 
+Назначение команды cd - изменить текущую дирректорию: при вводе без аргументов возвращает пользователя в корень VFS, Если указано .., поднимается на уровень выше, Для других путей используется ResolvePath() — если найден узел-директория, текущая директория (CurrentDir) меняется на него.
+
+    def CMDls(self, Args):
+        if not self.CurrentDir:
+            return "VFS не загружена. Невозможно выполнить ls."
+        DirToList = self.CurrentDir
+        if Args:
+            target = Args[0].strip()
+            node = self.ResolvePath(self.CurrentDir, target)
+            if not node:
+                return f"Нет такой директории: {target}"
+            if node.Type != "directory":
+                return f"{target} не является директорией"
+            DirToList = node
+        ChildNames = []
+        for ChildNode in DirToList.ListChildren():
+            ChildNames.append(ChildNode.Name)
+        return "  ".join(ChildNames) if ChildNames else "(пусто)"
+
+    
+    def CMDcd(self, Args):
+        if not self.CurrentDir:
+            return "VFS не загружена. Невозможно выполнить cd."
+        if not Args:
+            self.CurrentDir = self.VFSRoot
+            return
+        Path = Args[0].strip()
+        if Path == "..":
+            if self.CurrentDir.Parent:
+                self.CurrentDir = self.CurrentDir.Parent
+            return
+        Node = self.ResolvePath(self.CurrentDir, Path)
+        if not Node:
+            return f"Нет такой директории: {Path}"
+        if Node.Type != "directory":
+            return f"{Path} не является директорией"
+        self.CurrentDir = Node
+
+2 требование: Реализовать новые команды: who, cat, tac.
+Реализация: Команда who выводит имя текущего пользователя операционной системы. Она пробует получить имя пользователя через os.getlogin(), если это не удаётся, например, при запуске в среде без терминала, используется переменные окружения USER или USERNAME. При отсутствии всех значений возвращается user.
+
+    def CMDwho(self, Args):
+        try:
+            user = os.getlogin()
+        except Exception:
+            user = os.environ.get("USER") or os.environ.get("USERNAME") or "user"
+        return user
+
+Команда cat выводит содержимое файла в текстовом виде. Сначала проверяется наличие аргумента, то есть путь к файлу. Путь разрешается функцией ResolvePath(). Если узел существует и имеет тип file, содержимое декодируется из utf-8. При ошибках декодирования символы заменяются, чтобы не прерывать работу. Полученный текст возвращается пользователю. Если путь не существует, то выводится сообщение «Нет такого файла». Если указан каталог — сообщение «… не является файлом».
+
+    def CMDcat(self, Args):
+        if not Args:
+            return "Использование: cat <путь>"
+        path = Args[0]
+        node = self.ResolvePath(self.CurrentDir, path)
+        if not node:
+            return f"Нет такого файла: {path}"
+        if node.Type != "file":
+            return f"{path} не является файлом"
+        try:
+            text = node.Content.decode('utf-8')
+        except Exception:
+            text = node.Content.decode('utf-8', errors='replace')
+        return text
+
+Команда tac отображает файл построчно в обратном порядке. Сначала загружает и декодирует содержимое файла аналогично cat. Потом разделяет текст на строки, переворачивает их и объединяет снова. Возвращает перевёрнутый текст.
+    def CMDtac(self, Args):
+        if not Args:
+            return "Использование: tac <путь>"
+        path = Args[0]
+        node = self.ResolvePath(self.CurrentDir, path)
+        if not node:
+            return f"Нет такого файла: {path}"
+        if node.Type != "file":
+            return f"{path} не является файлом"
+        text = node.Content.decode('utf-8', errors='replace')
+        lines = text.splitlines()
+        return "\n".join(reversed(lines))
+
+3 требование: Создать стартовый скрипт для тестирования всех реализованных на этом этапе команд. Добавить туда примеры всех режимов команд, включая работу с VFS и обработку ошибок.
+
+Реализация: были созданы новые файлы для тестирования всех существующих на этом этапе команд и их обработка ошибок.
+
+Файл vfs_stage4.csv содержит:
+
+Path,Type,Content
+/,directory,
+/home,directory,
+/My Documents,directory,
+/a,directory,
+/a/b,directory,
+/logs,directory,
+/bin,directory,
+/bin/empty_dir,directory,
+/home/readme.txt,file,VGhpcyBpcyBhIHJlYWRtZS5cbkhlbGxvLCB3b3JsZCE=
+/home/multiline.txt,file,VGhpcyBpcyBsaW5lIDEuCkxpbmUgMiBoZXJlLgpMaW5lIDMgZm9sbG93cy4=
+/logs/log1.txt,file,QXBwbGljYXRpb24gc3RhcnRlZCBzdWNjZXNzZnVsbHkuCkxvZyBlbnRyeSAyLgo=
+/bin/tool.sh,file,ZWNobyAiSGVsbG8iCg==
+/My Documents/file with spaces.txt,file,VGhpcyBpcyBhIGZpbGUgd2l0aCBzcGFjZXMgaW4gdGhlIG5hbWUu
+
+Файл script_stage4.txt содержит: 
+# базовые команды
+who
+ls
+
+# ls: корень и подкаталоги (абсолютные и с кавычками)
+ls /
+ls /home
+ls "/My Documents"
+ls /home/readme.txt
+
+# ls пустой директории
+ls /bin
+ls /bin/empty_dir
+
+# cd переходы (абсолютный, относительный, .., переход в корень и без аргумента)
+cd /home
+ls
+cd ..
+ls
+cd
+
+# Перейти в глубоко вложенный каталог (абсолютный и относительный)
+cd /a/b
+ls
+cd ..
+cd /
+ls /a/b
+
+# Попытка cd в файл (ожидаем ошибку)
+cd /bin/tool.sh
+
+# cd .. в корне (должно оставаться в /)
+cd /
+cd ..
+
+# cat: просмотр файлов (правильный и ошибочные случаи)
+cat /home/readme.txt
+cat /home/multiline.txt
+
+# cat на директории (ошибка)
+cat /home
+
+# cat несуществующего файла (ошибка)
+cat /no/such/file.txt
+
+# cat нескольких файлов подряд
+cat /home/readme.txt /home/multiline.txt
+
+# tac: перевёрнутый по строкам вывод
+tac /home/multiline.txt
+tac /logs/log1.txt
+
+# ls и cd с относительными путями и специальными точками
+cd /home
+ls
+cd .
+ls
+cd ..
+ls
+
+# Обработка кавычек и экранирования аргументов
+ls "My Documents"
+ls "My \"Documents\""
+ls "My\\ Documents"
+
+# Неизвестная команда
+foobar
+
+# незакрытая кавычка (парсерная ошибка)
+ls "unclosed quote
+
+В данном скрипте нет команды exit, так как она сразу же закроет окно после выполнения. Если не нужно просмотреть, как работают команды, то можно вписать в конец exit.
+
+Файл test_stage4.bat содержит:
+
+@echo off
+chcp 65001
+REM Тест с глубокой структурой
+python ..\vfs.py --vfs "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\CSV_files\vfs_stage4.csv" --script "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\script_files\script_stage4.txt"
+pause
+
+Здесь я не рассматриваю обработку ошибок, связанных с VFS, так как это было сделано на 3 этапе.
+
+Результат работы файла:
+
+![alt text](image-23.png)
+![alt text](image-24.png)
+![alt text](image-25.png)
+![alt text](image-26.png)
+![alt text](image-27.png)

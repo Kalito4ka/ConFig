@@ -1,0 +1,70 @@
+# базовые команды
+who
+ls
+
+# ls: корень и подкаталоги (абсолютные и с кавычками)
+ls /
+ls /home
+ls "/My Documents"
+ls /home/readme.txt
+
+# ls пустой директории
+ls /bin
+ls /bin/empty_dir
+
+# cd переходы (абсолютный, относительный, .., переход в корень и без аргумента)
+cd /home
+ls
+cd ..
+ls
+cd
+
+# Перейти в глубоко вложенный каталог (абсолютный и относительный)
+cd /a/b
+ls
+cd ..
+cd /
+ls /a/b
+
+# Попытка cd в файл (ожидаем ошибку)
+cd /bin/tool.sh
+
+# cd .. в корне (должно оставаться в /)
+cd /
+cd ..
+
+# cat: просмотр файлов (правильный и ошибочные случаи)
+cat /home/readme.txt
+cat /home/multiline.txt
+
+# cat на директории (ошибка)
+cat /home
+
+# cat несуществующего файла (ошибка)
+cat /no/such/file.txt
+
+# cat нескольких файлов подряд
+cat /home/readme.txt /home/multiline.txt
+
+# tac: перевёрнутый по строкам вывод
+tac /home/multiline.txt
+tac /logs/log1.txt
+
+# ls и cd с относительными путями и специальными точками
+cd /home
+ls
+cd .
+ls
+cd ..
+ls
+
+# Обработка кавычек и экранирования аргументов
+ls "My Documents"
+ls "My \"Documents\""
+ls "My\\ Documents"
+
+# Неизвестная команда
+foobar
+
+# незакрытая кавычка (парсерная ошибка)
+ls "unclosed quote
