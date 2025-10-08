@@ -349,7 +349,6 @@ class VFSEmulator:
                 self._startup_had_errors = True
                 return
 
-            # Успешно загружено (и ошибок не найдено)
             self.VFSRoot = root
             self.CurrentDir = root
             self.Print(f"VFS загружена успешно: {CSVPath}\n")
@@ -381,4 +380,3 @@ if __name__ == "__main__":
     RootWindow = tk.Tk()
     App = VFSEmulator(RootWindow, VFSpath=VFSpath, StartupScript=StartupScript)
     RootWindow.mainloop()
-

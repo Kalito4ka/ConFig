@@ -275,3 +275,303 @@ def CMDexit(self, Args):
 ------------------------------------------------------------------------
 
 Этап 3. VFS
+Цель: подключить виртуальную файловую систему (VFS).
+1 Требование: Все операции должны производиться в памяти. Запрещается распаковыватьили иным образом модифицировать данные VFS, за исключением возможных служебных команд.
+Реализация: Виртуальная файловая система полностью создана в оперативной памяти с помощью класса VFSNode. С помощью него создаются узлы, каждый из которых имеет имя, тип, бинарное содержимое для файлов и словарь детей для директорий. Все методы изменяют только объекты в памяти.
+
+class VFSNode:
+    def __init__(self, Name, NodeType="directory", Content=None, Parent=None):
+        self.Name = Name
+        self.Type = NodeType
+        self.Content = Content if Content else b""
+        self.Children = {}
+        self.Parent = Parent
+
+    def AddChildren(self, Child):
+        if self.Type != "directory":
+            raise ValueError("Нельзя добавлять потомка в файл")
+        self.Children[Child.Name] = Child
+        Child.Parent = self
+
+    def GetChild(self, Name):
+        return self.Children.get(Name)
+
+    def ListChildren(self):
+        return list(self.Children.values())
+
+    def Path(self):
+        parts = []
+        node = self
+        while node is not None and node.Parent is not None:
+            parts.append(node.Name)
+            node = node.Parent
+        return "/" + "/".join(reversed(parts))
+
+2 Требование: Источником VFS является CSV-файл. Для двоичных данных используется base64 или аналогичный формат. Необходимо разобраться, как представлять вложенные элементы VFS.
+
+Реализация: Загрузка VFS из CSV выполняется методом LoadVFSMenual, который читает файл через csv.DictReader, разбивает путь на части и строит дерево в памяти. Для файлов содержимое в base64 и декодируется в байты, для директорий создаются соответствующие узлы. Родительские связи строятся по частям пути и сохраняются в словаре nodes для поиска родителя.
+
+    def LoadVFSManual(self, CSVPath):
+        if not os.path.exists(CSVPath):
+            self.Print(f"Файл VFS не найден: {CSVPath}\n")
+            self.VFSRoot = None
+            self.CurrentDir = None
+            self._startup_had_errors = True
+            return
+
+        root = VFSNode("/", "directory")
+        nodes = {"/": root}
+
+        errors = []
+        processed_paths = set()
+
+        try:
+            with open(CSVPath, "r", encoding="utf-8-sig", newline='') as csvfile:
+                reader = csv.DictReader(csvfile)
+                if reader.fieldnames is None:
+                    self.Print(f"Ошибка формата VFS: CSV не содержит заголовков.\n")
+                    self.VFSRoot = None
+                    self.CurrentDir = None
+                    self._startup_had_errors = True
+                    return
+
+                fnames = [fn.strip() for fn in reader.fieldnames]
+                if "Path" not in fnames or "Type" not in fnames:
+                    self.Print(
+                        f"Ошибка формата VFS: в CSV обязателен столбец 'Path' и 'Type'. Найдены: {', '.join(fnames)}\n")
+                    self.VFSRoot = None
+                    self.CurrentDir = None
+                    self._startup_had_errors = True
+                    return
+
+                raw_rows = list(enumerate(reader, start=2))  # start=2 — потому что header на 1 строке
+                for lineno, row in raw_rows:
+                    raw_path = row.get("Path")
+                    raw_type = row.get("Type")
+                    raw_content = row.get("Content", "")
+
+                    if raw_path is None or raw_type is None:
+                        errors.append((lineno, "Отсутствует обязательное поле 'Path' или 'Type'"))
+                        continue
+
+                    path = raw_path.replace("\\", "/").strip()
+                    type_ = raw_type.strip()
+                    content = raw_content.strip() if raw_content else ""
+
+                    if not path:
+                        errors.append((lineno, "Пустое значение Path"))
+                        continue
+
+                    if path == "/":
+                        continue
+
+                    stripped_path = path.strip("/")
+                    path_parts = [p.strip() for p in stripped_path.split("/") if p.strip() != ""]
+                    if not path_parts:
+                        errors.append((lineno, f"Некорректный Path: '{raw_path}'"))
+                        continue
+
+                    node_name = path_parts[-1]
+                    parent_path = "/" + "/".join(path_parts[:-1]) if len(path_parts) > 1 else "/"
+
+                    parent = nodes.get(parent_path)
+                    if not parent:
+                        errors.append((lineno, f"Родительский путь не найден: '{parent_path}' для '{path}'"))
+                        continue
+
+                    if type_ == "file":
+                        try:
+                            content_bytes = base64.b64decode(content) if content else b""
+                        except Exception:
+                            content_bytes = b""
+                            errors.append(
+                                (lineno, f"Невалидный base64 в Content для файла '{path}' — содержимое будет пустым"))
+                        node = VFSNode(node_name, "file", content_bytes, Parent=parent)
+                    elif type_ == "directory":
+                        node = VFSNode(node_name, "directory", None, Parent=parent)
+                    else:
+                        errors.append((lineno, f"Неизвестный Type '{type_}' в строке"))
+                        continue
+
+                    if node_name in parent.Children:
+                        errors.append(
+                            (lineno, f"Дубликат узла '{node_name}' в '{parent_path}' — строка проигнорирована"))
+                        continue
+
+                    parent.AddChildren(node)
+                    processed_paths.add(path)
+
+                    if type_ == "directory":
+                        full_path = parent_path + "/" + node_name if parent_path != "/" else "/" + node_name
+                        nodes[full_path] = node
+
+            if errors:
+                self.Print(f"В процессе загрузки VFS обнаружены ошибки в файле {CSVPath}:\n")
+                for lineno, msg in errors:
+                    self.Print(f"  строка {lineno}: {msg}\n")
+                self.Print("\nVFS не загружена из-за ошибок формата.\n")
+                self.VFSRoot = None
+                self.CurrentDir = None
+                self._startup_had_errors = True
+                return
+
+            # Успешно загружено (и ошибок не найдено)
+            self.VFSRoot = root
+            self.CurrentDir = root
+            self.Print(f"VFS загружена успешно: {CSVPath}\n")
+
+        except Exception as e:
+            self.Print(f"Ошибка при загрузке VFS: {e}\n")
+            self.VFSRoot = None
+            self.CurrentDir = None
+            self._startup_had_errors = True
+
+3 Требование: Сообщить об ошибке загрузки VFS (файл не найден, неверный формат).
+
+Реализация: Метод LoadVFSManual проверяет наличие файла, корректность заголовков CSV, накапливает ошибки при разборе строк. При наличии ошибок выводит подробный список с номерами строк и прекращает загрузку, устанавливая флаг _startup_had_errors. Код выше.
+
+4 требование: Создать несколько скриптов реальной ОС, в которой выполняется эмулятор. Включить в каждый скрипт вызовы эмулятора для тестирования работы c различными вариантами VFS (минимальный, несколько файлов, не менее 3 уровней файлов и папок).
+
+Реализация: Были созданы файлы следующие файлы:
+basic_vfs.csv
+Содержимое:
+Path,Type,Content
+/,directory,
+/file1.txt,file,SGVsbG8gZnJvbSBmaWxlMQo=
+/dir1,directory,
+/dir1/file2.txt,file,RmlsZTIgY29udGVudAo=
+
+test_vfs_basic.bat
+Содержимое:
+@echo off
+chcp 65001
+REM Тест - базовый
+python ..\vfs.py --vfs "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\CSV_files\basic_vfs.csv" --script "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\script_files\basic_test.txt"
+
+basic_test.txt
+Содержимое:
+ls
+ls /
+ls "dir1"
+ls /dir1
+cd dir1
+ls
+cd ..
+ls file1.txt
+cd nonexist
+ls "unclosed quote
+
+multiple_files_vfs.csv
+Содержимое:
+Path,Type,Content
+/,directory,
+/rootfile.txt,file,Um9vdCBmaWxlCg==
+/docs,directory,
+/docs/readme.txt,file,QW5vdGhlciBmaWxlCg==
+/bin,directory,
+/bin/tool.sh,file,RW1wdHkgc2NyaXB0Cg==
+/bin/empty_dir,directory,
+
+test_vsf_multiple_files.bat
+Содержимое:
+@echo off
+chcp 65001
+REM Тест с несколькими файлами
+python ..\vfs.py --vfs "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\CSV_files\multiple_files_vfs.csv" --script "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\script_files\multiple_files_test.txt"
+
+multiple_files_test.txt
+Содержимое:
+ls "dir with spaces"
+ls "dir with \"escaped\" quotes"
+ls "unclosed
+# Проверка простых команд
+ls
+cd /
+ls file1.txt
+cd dir1
+ls
+cd ..
+cd nonexist
+# Проверка относительных переходов
+cd /
+cd dir1
+cd ..
+cd .
+cd ..
+# Ошибочные команды
+foobar
+
+deep_structure_vfs.csv
+Содержимое:
+Path,Type,Content
+/,directory
+/a,directory,
+/a/file_a.txt,file,TGV2ZWwxCkxldmVsMgpMZXZlbDMK
+/a/b,directory,
+/a/b/b_file.txt,file,RGVlcCBmaWxlCg==
+/a/b/c,directory
+/a/b/c/deep.txt,file,RGVlcCBmaWxlCg==
+/x,directory
+/x/y,directory
+/x/y/z,directory
+/x/y/z/zfile.txt,file,Um9vdCB6IGZpbGUK
+
+test_vfs_deep_structure.bat
+Содержимое:
+@echo off
+chcp 65001
+REM Тест с глубокой структурой
+python ..\vfs.py --vfs "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\CSV_files\deep_structure_vfs.csv" --script "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\script_files\deep_structure_test.txt"
+pause
+
+deep_structure_test.txt
+Содержимое:
+ls /
+cd /a
+ls
+cd b
+ls
+cd c
+ls
+cd ..
+cd ..
+cd ..
+ls /x/y/z
+cd /x/y/z
+ls
+cat deep.txt
+
+С помощью файла test_comprehensive.bat происходит запуск трёх предыдущих тестов.
+Содержимое:
+@echo off
+chcp 65001
+
+call test_vfs_basic.bat
+call test_vfs_multiple_files.bat
+call test_vfs_deep_structure.bat
+
+pause
+
+Результат запуска файла test_comprehensive.bat: Будет создано 3 окна VFS Emulator, которые будут выполнять друг за другом команды из basic_test.txt, multiple_files_test.txt, deep_structure_test.txt:
+
+1 окно:
+![alt text](image-13.png)
+![alt text](image-14.png)
+
+2 окно:
+![alt text](image-15.png)
+![alt text](image-16.png)
+![alt text](image-17.png)
+
+3 окно:
+![alt text](image-18.png)
+![alt text](image-19.png)
+
+Также файл test3.bat показывает, что, если путь VFS указан неправильно, то выведется сообщение об ошибке и программа работать не будет.
+![alt text](image-20.png)
+
+Файл test2.bat показывает, что будет, если не загрузить VFS:
+![alt text](image-21.png)
+
+Файл test4.bat показывает, что будет, если загрузить VFS, содержащую ошибку:
+![alt text](image-22.png)

@@ -1,5 +1,6 @@
 @echo off
 chcp 65001
-REM Тест 2 — указание только VFS
-python ..\vfs.py --vfs "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\CSV_files\VFS.csv"
+REM Тест 2 — указание только скрипт
+python ..\vfs.py --script "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\script_files\script_2.txt"
+
 pause
