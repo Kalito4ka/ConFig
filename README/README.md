@@ -309,7 +309,7 @@ class VFSNode:
 
 2 Требование: Источником VFS является CSV-файл. Для двоичных данных используется base64 или аналогичный формат. Необходимо разобраться, как представлять вложенные элементы VFS.
 
-Реализация: Загрузка VFS из CSV выполняется методом LoadVFSMenual, который читает файл через csv.DictReader, разбивает путь на части и строит дерево в памяти. Для файлов содержимое в base64 и декодируется в байты, для директорий создаются соответствующие узлы. Родительские связи строятся по частям пути и сохраняются в словаре nodes для поиска родителя.
+Реализация: Загрузка VFS из CSV выполняется методом LoadVFSMenual, который читает файл через csv.DictReader, разбивает путь на части и строит дерево в памяти. Для файлов содержимое в base64 и декодируется в байты, для директорий создаются соответствующие узлы. Родительские связи строятся по частям пути и сохраняются в словаре nodes для поиска родителя. Также в этом методе происходит изменение названия VFS, соответственно и рабочего окна.
 
     def LoadVFSManual(self, CSVPath):
         if not os.path.exists(CSVPath):
@@ -418,6 +418,18 @@ class VFSNode:
             # Успешно загружено (и ошибок не найдено)
             self.VFSRoot = root
             self.CurrentDir = root
+
+            try:
+                VFSfilename = os.path.basename(CSVPath)
+                vfs_name, _ = os.path.splitext(VFSfilename)
+                self.VFSname = vfs_name
+                try:
+                    self.RootWindow.title(f"VFS Emulator — {self.VFSname}")
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
             self.Print(f"VFS загружена успешно: {CSVPath}\n")
 
         except Exception as e:
@@ -435,122 +447,43 @@ class VFSNode:
 Реализация: Были созданы файлы следующие файлы:
 basic_vfs.csv
 Содержимое:
-Path,Type,Content
-/,directory,
-/file1.txt,file,SGVsbG8gZnJvbSBmaWxlMQo=
-/dir1,directory,
-/dir1/file2.txt,file,RmlsZTIgY29udGVudAo=
+![alt text](image-28.png)
 
 test_vfs_basic.bat
 Содержимое:
-@echo off
-chcp 65001
-REM Тест - базовый
-python ..\vfs.py --vfs "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\CSV_files\basic_vfs.csv" --script "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\script_files\basic_test.txt"
-
+![alt text](image-29.png)
+![alt text](image-34.png)
 basic_test.txt
 Содержимое:
-ls
-ls /
-ls "dir1"
-ls /dir1
-cd dir1
-ls
-cd ..
-ls file1.txt
-cd nonexist
-ls "unclosed quote
+![alt text](image-30.png)
 
 multiple_files_vfs.csv
 Содержимое:
-Path,Type,Content
-/,directory,
-/rootfile.txt,file,Um9vdCBmaWxlCg==
-/docs,directory,
-/docs/readme.txt,file,QW5vdGhlciBmaWxlCg==
-/bin,directory,
-/bin/tool.sh,file,RW1wdHkgc2NyaXB0Cg==
-/bin/empty_dir,directory,
+![alt text](image-31.png)
 
 test_vsf_multiple_files.bat
 Содержимое:
-@echo off
-chcp 65001
-REM Тест с несколькими файлами
-python ..\vfs.py --vfs "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\CSV_files\multiple_files_vfs.csv" --script "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\script_files\multiple_files_test.txt"
+![alt text](image-32.png)
+![alt text](image-33.png)
 
 multiple_files_test.txt
 Содержимое:
-ls "dir with spaces"
-ls "dir with \"escaped\" quotes"
-ls "unclosed
-# Проверка простых команд
-ls
-cd /
-ls file1.txt
-cd dir1
-ls
-cd ..
-cd nonexist
-# Проверка относительных переходов
-cd /
-cd dir1
-cd ..
-cd .
-cd ..
-# Ошибочные команды
-foobar
+![alt text](image-35.png)
 
 deep_structure_vfs.csv
 Содержимое:
-Path,Type,Content
-/,directory
-/a,directory,
-/a/file_a.txt,file,TGV2ZWwxCkxldmVsMgpMZXZlbDMK
-/a/b,directory,
-/a/b/b_file.txt,file,RGVlcCBmaWxlCg==
-/a/b/c,directory
-/a/b/c/deep.txt,file,RGVlcCBmaWxlCg==
-/x,directory
-/x/y,directory
-/x/y/z,directory
-/x/y/z/zfile.txt,file,Um9vdCB6IGZpbGUK
-
+![alt text](image-36.png)
 test_vfs_deep_structure.bat
 Содержимое:
-@echo off
-chcp 65001
-REM Тест с глубокой структурой
-python ..\vfs.py --vfs "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\CSV_files\deep_structure_vfs.csv" --script "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\script_files\deep_structure_test.txt"
-pause
-
+![alt text](image-37.png)
+![alt text](image-38.png)
 deep_structure_test.txt
 Содержимое:
-ls /
-cd /a
-ls
-cd b
-ls
-cd c
-ls
-cd ..
-cd ..
-cd ..
-ls /x/y/z
-cd /x/y/z
-ls
-cat deep.txt
+![alt text](image-39.png)
 
 С помощью файла test_comprehensive.bat происходит запуск трёх предыдущих тестов.
 Содержимое:
-@echo off
-chcp 65001
-
-call test_vfs_basic.bat
-call test_vfs_multiple_files.bat
-call test_vfs_deep_structure.bat
-
-pause
+![alt text](image-40.png)
 
 Результат запуска файла test_comprehensive.bat: Будет создано 3 окна VFS Emulator, которые будут выполнять друг за другом команды из basic_test.txt, multiple_files_test.txt, deep_structure_test.txt:
 
@@ -664,105 +597,18 @@ pause
 Реализация: были созданы новые файлы для тестирования всех существующих на этом этапе команд и их обработка ошибок.
 
 Файл vfs_stage4.csv содержит:
-
-Path,Type,Content
-/,directory,
-/home,directory,
-/My Documents,directory,
-/a,directory,
-/a/b,directory,
-/logs,directory,
-/bin,directory,
-/bin/empty_dir,directory,
-/home/readme.txt,file,VGhpcyBpcyBhIHJlYWRtZS5cbkhlbGxvLCB3b3JsZCE=
-/home/multiline.txt,file,VGhpcyBpcyBsaW5lIDEuCkxpbmUgMiBoZXJlLgpMaW5lIDMgZm9sbG93cy4=
-/logs/log1.txt,file,QXBwbGljYXRpb24gc3RhcnRlZCBzdWNjZXNzZnVsbHkuCkxvZyBlbnRyeSAyLgo=
-/bin/tool.sh,file,ZWNobyAiSGVsbG8iCg==
-/My Documents/file with spaces.txt,file,VGhpcyBpcyBhIGZpbGUgd2l0aCBzcGFjZXMgaW4gdGhlIG5hbWUu
+![alt text](image-41.png)
 
 Файл script_stage4.txt содержит: 
-# базовые команды
-who
-ls
-
-# ls: корень и подкаталоги (абсолютные и с кавычками)
-ls /
-ls /home
-ls "/My Documents"
-ls /home/readme.txt
-
-# ls пустой директории
-ls /bin
-ls /bin/empty_dir
-
-# cd переходы (абсолютный, относительный, .., переход в корень и без аргумента)
-cd /home
-ls
-cd ..
-ls
-cd
-
-# Перейти в глубоко вложенный каталог (абсолютный и относительный)
-cd /a/b
-ls
-cd ..
-cd /
-ls /a/b
-
-# Попытка cd в файл (ожидаем ошибку)
-cd /bin/tool.sh
-
-# cd .. в корне (должно оставаться в /)
-cd /
-cd ..
-
-# cat: просмотр файлов (правильный и ошибочные случаи)
-cat /home/readme.txt
-cat /home/multiline.txt
-
-# cat на директории (ошибка)
-cat /home
-
-# cat несуществующего файла (ошибка)
-cat /no/such/file.txt
-
-# cat нескольких файлов подряд
-cat /home/readme.txt /home/multiline.txt
-
-# tac: перевёрнутый по строкам вывод
-tac /home/multiline.txt
-tac /logs/log1.txt
-
-# ls и cd с относительными путями и специальными точками
-cd /home
-ls
-cd .
-ls
-cd ..
-ls
-
-# Обработка кавычек и экранирования аргументов
-ls "My Documents"
-ls "My \"Documents\""
-ls "My\\ Documents"
-
-# Неизвестная команда
-foobar
-
-# незакрытая кавычка (парсерная ошибка)
-ls "unclosed quote
-
+![alt text](image-42.png)
+![alt text](image-43.png)
+![alt text](image-44.png)
 В данном скрипте нет команды exit, так как она сразу же закроет окно после выполнения. Если не нужно просмотреть, как работают команды, то можно вписать в конец exit.
 
 Файл test_stage4.bat содержит:
 
-@echo off
-chcp 65001
-REM Тест с глубокой структурой
-python ..\vfs.py --vfs "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\CSV_files\vfs_stage4.csv" --script "C:\Users\cozor\OneDrive\Рабочий стол\Практические работы\КОНФИГ\ConFig\script_files\script_stage4.txt"
-pause
-
-Здесь я не рассматриваю обработку ошибок, связанных с VFS, так как это было сделано на 3 этапе.
+![alt text](image-45.png)
+![alt text](image-46.png)
 
 Результат работы файла:
 

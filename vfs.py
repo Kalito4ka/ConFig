@@ -415,6 +415,18 @@ class VFSEmulator:
 
             self.VFSRoot = root
             self.CurrentDir = root
+
+            try:
+                VFSfilename = os.path.basename(CSVPath)
+                vfs_name, _ = os.path.splitext(VFSfilename)
+                self.VFSname = vfs_name
+                try:
+                    self.RootWindow.title(f"VFS Emulator — {self.VFSname}")
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
             self.Print(f"VFS загружена успешно: {CSVPath}\n")
 
         except Exception as e:
