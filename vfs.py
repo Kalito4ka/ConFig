@@ -20,6 +20,11 @@ class VFSNode:
         self.Children[Child.Name] = Child
         Child.Parent = self
 
+    def RemoveChild(self, Name):
+        child = self.Children.pop(Name, None)
+        if child is not None:
+            child.Parent = None
+
     def GetChild(self, Name):
         return self.Children.get(Name)
 
@@ -52,6 +57,7 @@ class VFSEmulator:
                          "who": self.CMDwho,
                          "cat": self.CMDcat,
                          "tac": self.CMDtac,
+                         "mv": self.CMDmv,
                          "exit": self.CMDexit,
                          }
 
@@ -244,6 +250,86 @@ class VFSEmulator:
         text = node.Content.decode('utf-8', errors='replace')
         lines = text.splitlines()
         return "\n".join(reversed(lines))
+
+    def CMDmv(self, Args):
+        if len(Args) != 2:
+            return "Использование: mv <источник> <назначение>"
+
+        SourcePath = Args[0]
+        DestPath = Args[1]
+
+        SourceNode = self.ResolvePath(self.CurrentDir, SourcePath)
+        if not SourceNode:
+            return f"Нет такого файла или директории: {SourcePath}"
+        if SourceNode == self.VFSRoot:
+            return "Нельзя перемещать корень VFS"
+
+        DestNode = self.ResolvePath(self.CurrentDir, DestPath)
+
+        if DestNode and DestNode.Type == "directory":
+            TargetParent = DestNode
+            NewName = SourceNode.Name
+        else:
+            DestString = DestPath.strip()
+            if DestString.endswith("/") and DestString != "/":
+                DestString = DestString.rstrip("/")
+
+            if DestString.startswith("/"):
+                ParentString = (
+                    "/" + "/".join(p for p in DestString.strip("/").split("/")[:-1])
+                    if "/" in DestString.strip("/")
+                    else "/"
+                )
+            else:
+                Parts = [p for p in DestString.split("/") if p != ""]
+                if len(Parts) <= 1:
+                    ParentString = "."
+                else:
+                    ParentString = "/".join(Parts[:-1])
+
+            if "/" in DestString:
+                BaseName = DestString.strip("/").split("/")[-1]
+            else:
+                BaseName = DestString
+
+            if BaseName != "":
+                NewName = BaseName
+            else:
+                NewName = SourceNode.Name
+
+            if ParentString == ".":
+                TargetParent = self.CurrentDir
+            else:
+                TargetParent = self.ResolvePath(self.CurrentDir, ParentString)
+
+            if not TargetParent:
+                return f"Родительский путь назначения не найден: {ParentString}"
+            if TargetParent.Type != "directory":
+                return f"Родитель назначения '{ParentString}' не является директорией"
+
+        CheckNode = TargetParent
+        while CheckNode is not None:
+            if CheckNode == SourceNode:
+                return "Нельзя переместить директорию внутрь её потомка!"
+            CheckNode = CheckNode.Parent
+
+        ExistingNode = TargetParent.GetChild(NewName)
+        if ExistingNode:
+            TargetParent.RemoveChild(NewName)
+
+        if SourceNode.Parent:
+            SourceNode.Parent.RemoveChild(SourceNode.Name)
+
+        SourceNode.Name = NewName
+        TargetParent.AddChildren(SourceNode)
+
+        FullDestPath = (
+                TargetParent.Path()
+                + ("/" if TargetParent.Path() != "/" else "")
+                + NewName
+        )
+
+        return f"Перемещено: из '{SourcePath}' в '{FullDestPath}'"
 
     def CMDexit(self, Args):
         if getattr(self, "_startup_had_errors", False):

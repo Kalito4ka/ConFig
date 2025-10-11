@@ -509,6 +509,8 @@ deep_structure_test.txt
 Файл test4.bat показывает, что будет, если загрузить VFS, содержащую ошибку:
 ![alt text](image-22.png)
 
+------------------------------------------------------------------------
+
 Этап 4
 Цель: поддержать команды, имитирующие работу в UNIX-подобной командной строке.
 1 требование: Необходимо реализовать логику для ls и cd.
@@ -617,3 +619,156 @@ deep_structure_test.txt
 ![alt text](image-25.png)
 ![alt text](image-26.png)
 ![alt text](image-27.png)
+
+-------------------------------------------------------------------------
+
+5 этап:
+
+Цель: поддержать более сложные команды, изменяющие состояние VFS, при
+этом модификации должны осуществляться только в памяти.
+
+1 Требование: Реализовать команды: mv.
+Реализация:
+
+В класс VFSNode был добавлен новый метод, который удаляет дочерний узел с именем Name из словаря self.Children. Если узел найден, он удаляется и у него сбрасывается ссылка на родителя child.Parent = None. Если имя не найдено, то метод ничего не делает.
+
+    def RemoveChild(self, Name):
+        child = self.Children.pop(Name, None)
+        if child is not None:
+            child.Parent = None
+
+В свойство Commands класса VFSEmulator была добавлена новая команда:
+
+self.Commands = {"ls": self.CMDls,
+                         "cd": self.CMDcd,
+                         "who": self.CMDwho,
+                         "cat": self.CMDcat,
+                         "tac": self.CMDtac,
+                         "mv": self.CMDmv,
+                         "exit": self.CMDexit,
+                         }
+
+Добавлен новый метод CMDmv, который реализует команду mv <источник> <назначение>. Эта команда перемещает или переименовывает файл или директорию внутри виртуальной структуры. Изменения происходят только в памяти, в объектной модели VFSNode.
+
+Как работает метод: 
+1. Проверяет, что передано ровно 2 аргумента, иначе возвращает подсказку по использованию. 
+2. Разрешает путь источника (ResolvePath), если узел не найден: ошибка. 3. Блокирует попытку переместить корень VFS. 
+4. Пытается разрешить путь назначения: если DestPath указывает на существующую директорию: целевой родитель = эта директория, новое имя = старое. В ином случае разбирает DestPath на родительский путь и базовое имя (новое имя), разрешает родительский путь (может быть . — текущая директория). 
+5. Проверяет, что TargetParent существует и является директорией, иначе: ошибка. 
+6. Защищает от перемещения директории внутрь её собственного потомка: идёт по родителям TargetParent вверх и, если встретит SourceNode, возвращает ошибку. 
+7. Если в целевой директории уже есть узел с таким именем, то удаляет его.
+8. Удаляет SourceNode из старого родителя, присваивает ему новое имя и добавляет в TargetParent, корректно устанавливая ссылку Parent.
+9. Формирует абсолютный путь назначения и возвращает сообщение об успешном перемещении.
+
+    def CMDmv(self, Args):
+        if len(Args) != 2:
+            return "Использование: mv <источник> <назначение>"
+
+        SourcePath = Args[0]
+        DestPath = Args[1]
+
+        SourceNode = self.ResolvePath(self.CurrentDir, SourcePath)
+        if not SourceNode:
+            return f"Нет такого файла или директории: {SourcePath}"
+        if SourceNode == self.VFSRoot:
+            return "Нельзя перемещать корень VFS"
+
+        DestNode = self.ResolvePath(self.CurrentDir, DestPath)
+
+        if DestNode and DestNode.Type == "directory":
+            TargetParent = DestNode
+            NewName = SourceNode.Name
+        else:
+            DestString = DestPath.strip()
+            if DestString.endswith("/") and DestString != "/":
+                DestString = DestString.rstrip("/")
+
+            if DestString.startswith("/"):
+                ParentString = (
+                    "/" + "/".join(p for p in DestString.strip("/").split("/")[:-1])
+                    if "/" in DestString.strip("/")
+                    else "/"
+                )
+            else:
+                Parts = [p for p in DestString.split("/") if p != ""]
+                if len(Parts) <= 1:
+                    ParentString = "."
+                else:
+                    ParentString = "/".join(Parts[:-1])
+
+            if "/" in DestString:
+                BaseName = DestString.strip("/").split("/")[-1]
+            else:
+                BaseName = DestString
+
+            if BaseName != "":
+                NewName = BaseName
+            else:
+                NewName = SourceNode.Name
+
+            if ParentString == ".":
+                TargetParent = self.CurrentDir
+            else:
+                TargetParent = self.ResolvePath(self.CurrentDir, ParentString)
+
+            if not TargetParent:
+                return f"Родительский путь назначения не найден: {ParentString}"
+            if TargetParent.Type != "directory":
+                return f"Родитель назначения '{ParentString}' не является директорией"
+
+        CheckNode = TargetParent
+        while CheckNode is not None:
+            if CheckNode == SourceNode:
+                return "Нельзя переместить директорию внутрь её потомка!"
+            CheckNode = CheckNode.Parent
+
+        ExistingNode = TargetParent.GetChild(NewName)
+        if ExistingNode:
+            TargetParent.RemoveChild(NewName)
+
+        if SourceNode.Parent:
+            SourceNode.Parent.RemoveChild(SourceNode.Name)
+
+        SourceNode.Name = NewName
+        TargetParent.AddChildren(SourceNode)
+
+        FullDestPath = (
+                TargetParent.Path()
+                + ("/" if TargetParent.Path() != "/" else "")
+                + NewName
+        )
+
+        return f"Перемещено: из '{SourcePath}' в '{FullDestPath}'"
+
+
+2 Требование: Создать стартовый скрипт для тестирования всех реализованных на этом этапе команд. Добавить туда примеры всех режимов команд, включая работу с VFS и обработку ошибок.
+
+Файл FINAL_TEST.bat запускает файлы, которые покажут все реализованные команды на этом этапе. Первые 4 вызова показывают ошибки, которые могут появиться при загрузке VFS, 5 вызов запускает финальный скрипт со всеми командами. 
+![alt text](image-47.png)
+
+test_stage5.bat:
+![alt text](image-48.png)
+![alt text](image-49.png)
+
+script_stage5.txt
+![alt text](image-50.png)
+![alt text](image-51.png)
+![alt text](image-52.png)
+![alt text](image-53.png)
+
+full_vfs_stage5.csv
+![alt text](image-54.png)
+
+Результаты запуска:
+![alt text](image-55.png)
+![alt text](image-56.png)
+![alt text](image-57.png)
+![alt text](image-58.png)
+![alt text](image-59.png)
+![alt text](image-60.png)
+![alt text](image-61.png)
+![alt text](image-62.png)
+![alt text](image-63.png)
+![alt text](image-64.png)
+![alt text](image-65.png)
+![alt text](image-66.png)

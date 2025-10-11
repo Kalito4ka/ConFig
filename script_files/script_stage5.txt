@@ -1,0 +1,119 @@
+# базовые
+who
+ls
+
+# ls: корень и подкаталоги (абсолютные и с кавычками)
+ls /
+ls /home
+ls "/My Documents"
+ls "/My Documents" /home
+
+# ls на файле: ошибка "не является директорией"
+ls /home/readme.txt
+
+# ls пустой директории
+ls /bin
+ls /bin/empty_dir
+
+# cd переходы (абсолютный, относительный, .., переход в корень и без аргумента)
+cd /home
+ls
+cd ..
+ls
+cd
+
+# перейти в глубоко вложенный каталог (абсолютный и относительный)
+cd /a/b
+ls
+cd ..
+cd /
+ls /a/b
+
+# попытка cd в файл: ошибка
+cd /bin/tool.txt
+
+# cat: просмотр файлов (правильный и ошибочные случаи)
+cat /home/readme.txt
+cat /home/multiline.txt
+
+# cat на директории: ошибка
+cat /home
+
+# cat несуществующего файла: ошибка
+cat /no/such/file.txt
+
+# tac: перевёрнутый по строкам вывод
+tac /home/multiline.txt
+tac /logs/log1.txt
+
+# ls и cd с относительными путями и специальными точками
+cd /home
+ls
+cd .
+ls
+cd ..
+ls
+
+# обработка кавычек
+ls "My Documents"
+
+# обработка текстового файла
+cat /bin/tool.txt
+
+# неизвестная команда
+command
+
+# незакрытая кавычка: ошибка
+ls "unclosed quote
+
+# 5 этап
+# исходное состояние
+ls /
+ls /home
+ls /a
+ls /a/b
+
+# переместить файл в другую директорию (сохранить имя)
+mv /home/readme.txt /a
+ls /a
+ls /home
+
+# переименовать файл в той же директории
+mv /a/readme.txt /a/readme_moved.txt
+ls /a
+
+# переместить вложенную директорию /a/b внутрь /home
+mv /a/b /home
+ls /home
+ls /a
+
+# попытка mv в несуществующий родитель: ошибка
+mv /a/readme_moved.txt /no/such/place/newname.txt
+
+# попытка mv корня: ошибка
+mv / /tmp
+
+# тест: перемещение директории внутрь её собственного потомка: ошибка
+mv /x /x/y
+
+# перемещение файла с пробелами в имени в /home
+mv "/My Documents/file with spaces.txt" /home/file_with_spaces_copy.txt
+ls /home
+
+# перезапись существующего файла: переместим и переименуем в имя, которое уже есть в /home
+mv /home/file_with_spaces_copy.txt /home/readme_moved.txt
+ls /home
+
+# переместить файл относительным путём, то есть сменим CurrentDir
+cd /home
+mv readme_moved.txt ../readme_back.txt
+cd ..
+ls /
+
+# mv с ошибочным источником
+mv /no/such /tmp
+
+# Вывод финального состояния
+ls /
+ls /home
+ls /a

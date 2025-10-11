@@ -1,0 +1,17 @@
+Path,Type,Content
+/,directory,
+ /home,directory,
+ /My Documents,directory,
+ /a,directory,
+ /a/b,directory,
+ /x,directory,
+ /x/y,directory,
+ /logs,directory,
+ /bin,directory,
+ /bin/empty_dir,directory,
+ /home/readme.txt,file,VGhpcyBpcyBhIHJlYWRtZS5cbkhlbGxvLCB3b3JsZCE=
+ /home/readme_moved.txt,file,VGhpcyBpcyBhIHJlYWRtZS5cbkhlbGxvLCB3b3JsZCE=
+ /home/multiline.txt,file,VGhpcyBpcyBsaW5lIDEuCkxpbmUgMiBoZXJlLgpMaW5lIDMgZm9sbG93cy4=
+ /logs/log1.txt,file,QXBwbGljYXRpb24gc3RhcnRlZCBzdWNjZXNzZnVsbHkuCkxvZyBlbnRyeSAyLgo=
+ /bin/tool.txt,file,ZWNobyAiSGVsbG8iCg==
+ /My Documents/file with spaces.txt,file,VGhpcyBpcyBhIGZpbGUgd2l0aCBzcGFjZXMgaW4gdGhlIG5hbWUu
